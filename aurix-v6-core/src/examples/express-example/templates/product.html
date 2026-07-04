@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>Product Example</title></head>
+  <body ix-domain="ProductPage" ix-version="6.0">
+    <section ix="productDetails.product#SKU123">
+      <h1 ix="name">iPhone 15 Pro — Titanium</h1>
+      <p ix="shortDescription">Pro performance with A17 titanium build.</p>
+      <div ix="images +auto">
+        <img src="/images/1.jpg">
+        <img src="/images/2.jpg">
+        <img src="/images/3.jpg">
+      </div>
+      <p ix="price:currency.USD">$999</p>
+      <div ix-field="variant.color" ix-auto="variant">
+        <button ix-value="Titanium">Titanium</button>
+        <button ix-value="Black">Black</button>
+        <button ix-value="White">White</button>
+      </div>
+      <button ix="addToCart(quantity,variant)">Add to Cart</button>
+    </section>
+  </body>
+</html>

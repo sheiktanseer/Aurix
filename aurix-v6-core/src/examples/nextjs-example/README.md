@@ -1,0 +1,1 @@
+Next.js example placeholder - integrate aurixRenderHtml in your Next.js server rendering pipeline.

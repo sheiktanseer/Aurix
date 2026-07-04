@@ -1,0 +1,38 @@
+{
+  "name": "aurix-v6-core",
+  "version": "6.0.0",
+  "author": "Sheik Tanseer",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "postbuild": "node scripts/copy-assets.mjs",
+    "test": "jest --coverage",
+    "lint": "eslint . --ext .ts",
+    "start:example:express": "node dist/examples/express-example/server.js",
+    "start:example:next": "cd src/examples/nextjs-example && npm run dev",
+    "validate": "ts-node src/validator/validate.ts"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "domhandler": "^5.0.3",
+    "express": "^4.18.2",
+    "jose": "^4.13.1",
+    "ajv": "^8.18.0",
+    "ajv-formats": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.0.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.3",
+    "eslint": "^8.45.0"
+  }
+}
