@@ -28,9 +28,16 @@ export {
 } from "./ir/values";
 export type { FieldType, TypedValue, ParseHints } from "./ir/values";
 export {
-  deriveSideEffects, derivePreconditions, deriveOutputSchema, defaultErrorContract,
+  SIDE_EFFECTS, isValidSideEffect, assertSideEffects, isReadOnly, isSuspiciousReadOnly,
+  derivePreconditions, deriveOutputSchema, defaultErrorContract,
 } from "./ir/safety";
 export type { ActionAttrs } from "./ir/safety";
+export { AurixValidationError } from "./ir/errors";
+
+// Scanner-only heuristic proposer (public API for the CLI scanner). Core/IR/
+// emitters must NOT import this — see test `sideEffects.no-derivation-import`.
+export { proposeSideEffects } from "./scanner/propose";
+export type { SideEffectProposal, ProposeInput } from "./scanner/propose";
 export { lintIr, formatLint } from "./ir/lint";
 export type { LintResult, LintFinding, LintSeverity } from "./ir/lint";
 

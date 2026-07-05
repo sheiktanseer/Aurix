@@ -14,6 +14,7 @@
  */
 
 import type { IrGraph } from "./types";
+import { isSuspiciousReadOnly } from "./safety";
 
 export type LintSeverity = "error" | "warning";
 
@@ -74,6 +75,21 @@ export function lintIr(graph: IrGraph): LintResult {
           severity: "warning",
           code: "W_LOW_TRUST_MONEY",
           message: `Money field "${field.name}" is low-trust (UGC). Require human confirmation before use.`,
+          where: node.id,
+        });
+      }
+    }
+
+    for (const action of Object.values(node.actions)) {
+      // Declared `none` on a mutating-method contract is suspicious (the
+      // declared value still stands — this is a warning, never an override).
+      if (isSuspiciousReadOnly(action.sideEffects, action.contract)) {
+        warnings.push({
+          severity: "warning",
+          code: "W_SIDE_EFFECTS_SUSPICIOUS",
+          message:
+            `Action "${action.name}" declares sideEffects:"none" but its contract uses ` +
+            `mutating method ${action.contract.method}. Confirm this is really read-only.`,
           where: node.id,
         });
       }

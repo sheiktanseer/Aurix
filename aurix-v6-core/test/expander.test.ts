@@ -35,7 +35,7 @@ test("action button does not inject a fake field into the graph (Fix 2)", () => 
     <section ix="productDetails.product#ACME">
       <h1 ix="name">ACME Widget</h1>
       <span ix="price">$19.99</span>
-      <button ix="addToCart" data-endpoint="/cart/add" data-method="POST">Add to Cart</button>
+      <button ix="addToCart" data-endpoint="/cart/add" data-method="POST" ix-side-effect="write">Add to Cart</button>
     </section>
   </body>`;
   const { html: out } = expandHtmlServerSide(html);

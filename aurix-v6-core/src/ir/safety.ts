@@ -1,12 +1,15 @@
 /**
- * Derivation of the agent-safety trio for an action:
- *   1. sideEffects  — none | write | payment | destructive
+ * Agent-safety trio helpers for IR Actions.
+ *
+ *   1. sideEffects  — none | write | payment | destructive  (AUTHOR-DECLARED)
  *   2. preconditions — auth + named requirements
  *   3. outputSchema  — success shape + a structured error contract
  *
- * This is the highest-value schema in AURIX: it is what lets an agent decide
- * "may I invoke this without asking?" A missing/unknown side effect is treated
- * conservatively (never `none` for a mutating verb).
+ * C-1 RULE (binding): sideEffects derivation is FORBIDDEN here and in every
+ * core/IR/emitter path. This module therefore contains NO heuristic that turns
+ * a contract into a sideEffects value — only validation and read-only helpers.
+ * The heuristic proposer lives in `src/scanner/propose.ts` and is import-
+ * fenced away from core (see test `sideEffects.no-derivation-import`).
  */
 
 import type {
@@ -16,84 +19,77 @@ import type {
   Preconditions,
   SideEffect,
 } from "./types";
+import { AurixValidationError } from "./errors";
 
-/** Raw action attributes read off the DOM element. */
+export const SIDE_EFFECTS: readonly SideEffect[] = ["none", "write", "payment", "destructive"] as const;
+
+export function isValidSideEffect(v: unknown): v is SideEffect {
+  return typeof v === "string" && (SIDE_EFFECTS as readonly string[]).includes(v);
+}
+
+/**
+ * Validates an author-declared sideEffects value at IR construction time.
+ * Missing or invalid → throws E_SIDE_EFFECTS_MISSING. There is no default and
+ * no derivation; this fires identically in strict and loose mode.
+ */
+export function assertSideEffects(actionName: string, raw: unknown): SideEffect {
+  const v = typeof raw === "string" ? raw.trim().toLowerCase() : raw;
+  if (!isValidSideEffect(v)) {
+    throw new AurixValidationError(
+      "E_SIDE_EFFECTS_MISSING",
+      `Action "${actionName}" must declare sideEffects as one of ` +
+        `none|write|payment|destructive (author-declared, no default). ` +
+        `Got: ${raw === undefined ? "undefined" : JSON.stringify(raw)}.`
+    );
+  }
+  return v;
+}
+
+/** Read-only iff sideEffects is exactly "none". Used by emitters for readOnlyHint. */
+export function isReadOnly(action: { sideEffects: SideEffect }): boolean {
+  return action.sideEffects === "none";
+}
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Cross-check for the W_SIDE_EFFECTS_SUSPICIOUS warning: an author declared
+ * `none` on an action whose contract uses a mutating HTTP method. This is a
+ * WARNING (surfaced by lint), never a hard error and never a silent override —
+ * the declared value still stands.
+ */
+export function isSuspiciousReadOnly(sideEffects: SideEffect, contract: ActionContract): boolean {
+  const method = (contract.method || "").toUpperCase();
+  return sideEffects === "none" && MUTATING_METHODS.has(method);
+}
+
+/** Raw precondition/output attributes read off the DOM element. */
 export type ActionAttrs = {
-  endpoint?: string;
-  method?: string;
-  handler?: string;
-  /** Explicit author override: ix-side-effect / data-side-effect. */
-  sideEffect?: string;
   auth?: string;
   requires?: string;
-  /** Explicit author override for success schema (JSON string). */
   output?: string;
 };
 
-const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const PAYMENT_HINT = /\b(pay|payment|checkout|charge|billing|purchase|order|subscribe|donate)\b/i;
-const DESTRUCTIVE_HINT = /\b(delete|remove|destroy|cancel|deactivate|close|revoke|wipe)\b/i;
-
-function normalizeSideEffect(raw: string | undefined): SideEffect | null {
-  if (!raw) return null;
-  const v = raw.trim().toLowerCase();
-  if (v === "none" || v === "read" || v === "readonly" || v === "read-only") return "none";
-  if (v === "write") return "write";
-  if (v === "payment") return "payment";
-  if (v === "destructive") return "destructive";
-  return null;
-}
-
 /**
- * Derives the side-effect class for an action.
- *
- * Precedence: explicit author override > destructive verb/method > payment
- * hint > mutating method (write) > default `none`. The default is only `none`
- * for non-mutating contracts; an unknown mutating method is never silently
- * classified as safe.
+ * Builds preconditions from author attributes. `auth` is a boolean gate; a
+ * value of "required"/"true"/"1"/"yes" (or presence of any `requires`) means
+ * auth is required. This reads only precondition attributes — it does not look
+ * at sideEffects, so it cannot be a covert sideEffects derivation.
  */
-export function deriveSideEffects(contract: ActionContract, attrs: ActionAttrs): SideEffect {
-  const explicit = normalizeSideEffect(attrs.sideEffect);
-  if (explicit) return explicit;
-
-  const method = (contract.method || attrs.method || "").toUpperCase();
-  const endpoint = contract.endpoint || attrs.endpoint || "";
-  const name = `${attrs.handler || ""} ${endpoint}`;
-
-  if (method === "DELETE" || DESTRUCTIVE_HINT.test(name)) return "destructive";
-  if (PAYMENT_HINT.test(name)) return "payment";
-  if (MUTATING_METHODS.has(method)) return "write";
-
-  // Form contracts with no explicit method default to a mutating submit.
-  if (contract.kind === "form" && !method) return "write";
-  // A handler with no other signal is assumed to write (conservative).
-  if (contract.kind === "handler" && !method) return "write";
-
-  return "none";
-}
-
-/**
- * Derives preconditions. When the author does not specify `auth`, mutating
- * side effects default to `required` (fail-safe) and reads to `optional`.
- */
-export function derivePreconditions(sideEffects: SideEffect, attrs: ActionAttrs): Preconditions {
+export function derivePreconditions(attrs: ActionAttrs): Preconditions {
   const requires = (attrs.requires || "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 
-  let auth: Preconditions["auth"];
-  const explicit = (attrs.auth || "").trim().toLowerCase();
-  if (explicit === "none" || explicit === "required" || explicit === "optional") {
-    auth = explicit as Preconditions["auth"];
-  } else {
-    auth = sideEffects === "none" ? "optional" : "required";
-  }
+  const authRaw = (attrs.auth || "").trim().toLowerCase();
+  const authTruthy = ["required", "true", "1", "yes", "auth"].includes(authRaw);
+  const auth = authTruthy || requires.length > 0;
 
   return { auth, requires };
 }
 
-/** The canonical structured error envelope every action advertises. */
+/** The canonical structured error envelope every action advertises (C-4 shape). */
 export function defaultErrorContract(): ErrorContract {
   return {
     type: "object",
@@ -109,7 +105,7 @@ export function defaultErrorContract(): ErrorContract {
 /**
  * Builds the action output schema: a success shape (author-provided JSON via
  * `ix-output`/`data-output`, else a permissive object) plus the standard error
- * contract. Agents can rely on the error envelope shape regardless of endpoint.
+ * contract. Not a sideEffects derivation.
  */
 export function deriveOutputSchema(attrs: ActionAttrs): OutputSchema {
   let success: Record<string, unknown> = { type: "object", description: "Action result payload." };
@@ -118,7 +114,7 @@ export function deriveOutputSchema(attrs: ActionAttrs): OutputSchema {
       const parsed = JSON.parse(attrs.output);
       if (parsed && typeof parsed === "object") success = parsed as Record<string, unknown>;
     } catch {
-      // Malformed author schema is ignored here; the lint layer reports it.
+      // Malformed author schema ignored here; lint reports it.
     }
   }
   return { success, error: defaultErrorContract() };

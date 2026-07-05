@@ -151,7 +151,7 @@ describe("phantom-tool suppression (expander)", () => {
   test("a button WITH a contract becomes an action", () => {
     const html = `<body>
       <section ix="productDetails.product#P1">
-        <button ix="addToCart" ix-endpoint="/cart/add" ix-method="POST">Add</button>
+        <button ix="addToCart" ix-endpoint="/cart/add" ix-method="POST" ix-side-effect="write">Add</button>
       </section>
     </body>`;
     const { html: out } = expandHtmlServerSide(html, { mode: "debug" });
@@ -243,7 +243,7 @@ describe("SSR/CSR parity", () => {
     <section ix="productDetails.product#SKU123">
       <h1 ix="name">Widget</h1>
       <span ix="price">$9.99</span>
-      <button ix="addToCart" ix-endpoint="/cart/add" ix-method="POST">Add</button>
+      <button ix="addToCart" ix-endpoint="/cart/add" ix-method="POST" ix-side-effect="write">Add</button>
       <button ix="phantom">Phantom</button>
     </section>
   </body>`;

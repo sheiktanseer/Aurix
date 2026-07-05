@@ -41,8 +41,8 @@ export type ActionContract = {
 };
 
 export type Preconditions = {
-  /** Auth required to invoke: none | optional | required. */
-  auth: "none" | "optional" | "required";
+  /** Whether authentication is required to invoke the action. */
+  auth: boolean;
   /** Named preconditions that must hold (e.g. "item-in-stock", "logged-in"). */
   requires: string[];
 };
@@ -71,8 +71,9 @@ export type IrAction = {
   method?: string;
   endpoint?: string;
   requires: string[];
-  auth: Preconditions["auth"];
+  auth: boolean;
   // --- agent-safety trio ---
+  /** Author-declared; there is no default and no derivation (C-1). */
   sideEffects: SideEffect;
   preconditions: Preconditions;
   outputSchema: OutputSchema;

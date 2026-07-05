@@ -9,7 +9,7 @@ import { deriveNodeId, structuralPath, canonicalizeGraph } from "../core/canonic
 import { coerceValue, type FieldType } from "./values";
 import { resolveFieldType, loadVocab, type VocabConfig } from "./vocab";
 import {
-  deriveSideEffects,
+  assertSideEffects,
   derivePreconditions,
   deriveOutputSchema,
   type ActionAttrs,
@@ -29,6 +29,12 @@ export type BuildIrOptions = {
   version?: string;
   /** Emit the structural `debug.path` locator on each node (debug mode only). */
   includeDebug?: boolean;
+  /**
+   * Reserved for strict-mode lint gating (2.2). Note: safety invariants such as
+   * sideEffects validation are NOT gated by this flag — they throw in strict
+   * AND loose mode.
+   */
+  strict?: boolean;
 };
 
 const VALID_FIELD_TYPES = new Set<FieldType>(["text", "money", "date", "enum", "url", "number", "boolean"]);
@@ -84,27 +90,29 @@ function buildAction($: CheerioAPI, a: any): IrAction | null {
   const name = $a.attr("data-action");
   if (!name) return null;
 
+  const endpoint = $a.attr("data-endpoint") || undefined;
+  const method = $a.attr("data-method") || undefined;
+  const handler = $a.attr("data-handler") || undefined;
+
+  const kind = ($a.attr("data-contract") as ActionContractKind) ||
+    (endpoint && method ? "http" : handler ? "handler" : "form");
+  const contract: ActionContract = {
+    kind,
+    ...(endpoint ? { endpoint } : {}),
+    ...(method ? { method } : {}),
+    ...(handler ? { handler } : {}),
+  };
+
+  // C-1: sideEffects is author-declared and validated at construction. Missing
+  // or invalid throws E_SIDE_EFFECTS_MISSING — no derivation, no default.
+  const sideEffects = assertSideEffects(name, $a.attr("data-side-effect"));
+
   const attrs: ActionAttrs = {
-    endpoint: $a.attr("data-endpoint") || undefined,
-    method: $a.attr("data-method") || undefined,
-    handler: $a.attr("data-handler") || undefined,
-    sideEffect: $a.attr("data-side-effect") || undefined,
     auth: $a.attr("data-auth") || undefined,
     requires: $a.attr("data-requires") || undefined,
     output: $a.attr("data-output") || undefined,
   };
-
-  const kind = ($a.attr("data-contract") as ActionContractKind) ||
-    (attrs.endpoint && attrs.method ? "http" : attrs.handler ? "handler" : "form");
-  const contract: ActionContract = {
-    kind,
-    ...(attrs.endpoint ? { endpoint: attrs.endpoint } : {}),
-    ...(attrs.method ? { method: attrs.method } : {}),
-    ...(attrs.handler ? { handler: attrs.handler } : {}),
-  };
-
-  const sideEffects = deriveSideEffects(contract, attrs);
-  const preconditions = derivePreconditions(sideEffects, attrs);
+  const preconditions = derivePreconditions(attrs);
   const outputSchema = deriveOutputSchema(attrs);
 
   return {

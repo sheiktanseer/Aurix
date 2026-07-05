@@ -106,7 +106,7 @@ export function parseMoney(raw: string, hints: ParseHints = {}): { value: number
  *    default), even when followed by 3 digits.
  */
 function parseNumericAmount(text: string): number | null {
-  const cleaned = text.replace(/[^0-9.,\-]/g, "");
+  const cleaned = text.replace(/[^0-9.,-]/g, "");
   if (!/[0-9]/.test(cleaned)) return null;
 
   const commas = (cleaned.match(/,/g) || []).length;
@@ -165,7 +165,7 @@ export function parseUrl(raw: string, hints: ParseHints = {}): string | null {
   if (DANGEROUS_URL_SCHEME.test(text)) return null;
 
   // Absolute URL: validate scheme via the URL parser.
-  if (/^[a-z][a-z0-9+.\-]*:/i.test(text)) {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(text)) {
     try {
       const u = new URL(text);
       if (u.protocol !== "http:" && u.protocol !== "https:" && u.protocol !== "mailto:" && u.protocol !== "tel:") {

@@ -12,7 +12,7 @@ const HTML_FIXTURE = `<body ix-domain="ProductPage">
   <section ix="productDetails.product#SKU1">
     <h1 ix="name">Widget</h1>
     <span ix="price">$9.99</span>
-    <button ix="addToCart" data-endpoint="/cart/add" data-method="POST">Add</button>
+    <button ix="addToCart" data-endpoint="/cart/add" data-method="POST" ix-side-effect="write">Add</button>
   </section>
 </body>`;
 

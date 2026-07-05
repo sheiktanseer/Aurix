@@ -8,7 +8,7 @@ import { expandHtmlServerSide, generateGraphFromDom } from "../src/core/expander
 import { load } from "cheerio";
 import { coerceValue, parseMoney, parseUrl, parseDate } from "../src/ir/values";
 import { resolveFieldType, loadVocab } from "../src/ir/vocab";
-import { deriveSideEffects, derivePreconditions } from "../src/ir/safety";
+import { derivePreconditions } from "../src/ir/safety";
 import { lintIr } from "../src/ir/lint";
 import type { IrGraph } from "../src/ir/types";
 
@@ -86,29 +86,20 @@ describe("IR typed fields", () => {
 // Agent-safety trio
 // ---------------------------------------------------------------------------
 describe("agent-safety trio", () => {
-  test("deriveSideEffects: DELETE -> destructive", () => {
-    expect(deriveSideEffects({ kind: "http", method: "DELETE", endpoint: "/x" }, {})).toBe("destructive");
+  test("derivePreconditions: requires implies auth=true", () => {
+    expect(derivePreconditions({ requires: "in-stock" })).toEqual({ auth: true, requires: ["in-stock"] });
   });
-  test("deriveSideEffects: checkout endpoint -> payment", () => {
-    expect(deriveSideEffects({ kind: "http", method: "POST", endpoint: "/checkout" }, {})).toBe("payment");
+  test("derivePreconditions: no signals -> auth=false", () => {
+    expect(derivePreconditions({})).toEqual({ auth: false, requires: [] });
   });
-  test("deriveSideEffects: POST -> write", () => {
-    expect(deriveSideEffects({ kind: "http", method: "POST", endpoint: "/cart/add" }, {})).toBe("write");
-  });
-  test("deriveSideEffects: GET -> none", () => {
-    expect(deriveSideEffects({ kind: "http", method: "GET", endpoint: "/search" }, {})).toBe("none");
-  });
-  test("derivePreconditions: write defaults to auth required", () => {
-    expect(derivePreconditions("write", {}).auth).toBe("required");
-  });
-  test("derivePreconditions: none defaults to auth optional", () => {
-    expect(derivePreconditions("none", {}).auth).toBe("optional");
+  test("derivePreconditions: explicit auth=required", () => {
+    expect(derivePreconditions({ auth: "required" }).auth).toBe(true);
   });
 
-  test("action in IR carries sideEffects, preconditions, outputSchema", () => {
+  test("action in IR carries author-declared sideEffects, preconditions, outputSchema", () => {
     const HTML = `<body>
       <section ix="productDetails.product#P1">
-        <button ix="addToCart" ix-endpoint="/cart/add" ix-method="POST" ix-requires="in-stock">Add</button>
+        <button ix="addToCart" ix-endpoint="/cart/add" ix-method="POST" ix-side-effect="write" ix-requires="in-stock">Add</button>
       </section>
     </body>`;
     const { html: out } = expandHtmlServerSide(HTML);
@@ -116,13 +107,13 @@ describe("agent-safety trio", () => {
     const product = graph.nodes.find((n) => n.entity === "product")!;
     const act = product.actions.addToCart;
     expect(act.sideEffects).toBe("write");
-    expect(act.preconditions.auth).toBe("required");
+    expect(act.preconditions.auth).toBe(true);
     expect(act.preconditions.requires).toContain("in-stock");
     expect(act.outputSchema.error.required).toContain("code");
     expect(act.outputSchema.error.properties.retriable.type).toBe("boolean");
   });
 
-  test("explicit ix-side-effect=payment overrides derivation", () => {
+  test("author declares ix-side-effect=payment", () => {
     const HTML = `<body>
       <section ix="orderDetails.order#O1">
         <button ix="confirm" ix-endpoint="/confirm" ix-method="POST" ix-side-effect="payment">Confirm</button>
