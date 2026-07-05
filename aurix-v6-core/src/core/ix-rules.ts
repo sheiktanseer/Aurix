@@ -2,9 +2,11 @@
 // and client-side (DOM) expanders. Keeping these here guarantees SSR/CSR parity:
 // there is exactly one source of truth for how an `ix` token becomes data-*.
 
+import type { ActionContract } from "../ir/types";
+
 export type IxClassification =
   | { kind: "entity"; type: string; entity: string; id?: string }
-  | { kind: "action"; action: string }
+  | { kind: "action"; action: string; contract: ActionContract }
   | { kind: "field"; field: string };
 
 /**
@@ -29,25 +31,70 @@ export function fullFieldName(field: string, parentEntity: string | null): strin
 }
 
 /**
+ * Signals, read off a single element, that may add up to an action contract.
+ * These come from authoring attributes (`ix-endpoint`, `ix-method`,
+ * `ix-handler`, `ix-action`) or their `data-*` passthrough equivalents, plus a
+ * structural `isForm` flag computed by the expander (element is a <form> or a
+ * submit control bound to one).
+ */
+export type ContractSignals = {
+  endpoint?: string | null;
+  method?: string | null;
+  handler?: string | null;
+  isForm?: boolean;
+  /** Explicit `ix-action` value — names the action but does NOT by itself create one. */
+  explicitAction?: string | null;
+};
+
+/**
+ * Detects whether an element declares an action *contract*.
+ *
+ * A contract — and therefore an action — exists only when the element declares
+ * a concrete way to be invoked:
+ *   - endpoint + method (an HTTP contract), or
+ *   - a code handler (`ix-handler`), or
+ *   - a form (the element is a <form> / submit control bound to a form).
+ *
+ * `ix-action` alone is NOT a contract: it only supplies the action's name. This
+ * is what kills the phantom-tool class — a plain `<button ix="address">` or
+ * `<p ix="address">` can never become an exposed tool, because it declares no
+ * way to be invoked.
+ */
+export function detectContract(signals: ContractSignals): ActionContract | null {
+  const endpoint = signals.endpoint || undefined;
+  const method = signals.method || undefined;
+  const handler = signals.handler || undefined;
+
+  if (endpoint && method) return { kind: "http", endpoint, method };
+  if (handler) return { kind: "handler", handler };
+  if (signals.isForm) return { kind: "form", ...(endpoint ? { endpoint } : {}), ...(method ? { method } : {}) };
+  return null;
+}
+
+/**
  * Classifies a non-dotted ("short") ix token as either an action or a field.
  *
- * An element is an action when it is a button (tag or role) OR its ix starts
- * with one of the action verbs; otherwise it is a field.
+ * The rule is contract-driven, not verb-driven:
+ *   - If the element declares a contract, it is an action whose name is the
+ *     explicit `ix-action` value (if any) or the ix token itself.
+ *   - Otherwise it is a field.
  *
- * KNOWN FLAW (encoded deliberately, covered by a documenting test): the prefix
- * heuristic misclassifies field names that merely begin with an action verb —
- * e.g. ix="address" starts with "add" and is therefore treated as an action.
- * TODO(aurix): replace verb-prefix guessing with an explicit `ix-action`
- * attribute so authors declare intent instead of relying on string prefixes.
+ * There is deliberately NO string-prefix guessing. The old `startsWith("add")`
+ * heuristic misclassified data fields like "address" as tools; removing it is
+ * the point.
  */
 export function classifyShortIx(
   ix: string,
-  ctx: { tagName: string; role: string | null; parentEntity: string | null }
+  ctx: {
+    tagName: string;
+    role: string | null;
+    parentEntity: string | null;
+    contract?: ActionContract | null;
+    explicitAction?: string | null;
+  }
 ): IxClassification {
-  const isButton = ctx.tagName.toLowerCase() === "button" || ctx.role === "button";
-  const hasActionPrefix = ix.startsWith("add") || ix.startsWith("buy") || ix.startsWith("export");
-  if (isButton || hasActionPrefix) {
-    return { kind: "action", action: ix };
+  if (ctx.contract) {
+    return { kind: "action", action: ctx.explicitAction || ix, contract: ctx.contract };
   }
   return { kind: "field", field: fullFieldName(ix, ctx.parentEntity) };
 }

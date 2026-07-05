@@ -21,8 +21,8 @@ test("nested entity fields do not leak into the parent entity's node", () => {
   const { html: out } = expandHtmlServerSide(html);
   const $ = load(out);
   const graph = generateGraphFromDom($);
-  const order = graph.nodes.find((n: any) => n.entity === "order");
-  const product = graph.nodes.find((n: any) => n.entity === "product");
+  const order = graph.nodes.find((n: any) => n.entity === "order")!;
+  const product = graph.nodes.find((n: any) => n.entity === "product")!;
   // The child product's "name" must belong to the product node, not the order node.
   expect(Object.keys(order.fields)).toContain("order.total");
   expect(Object.keys(order.fields)).not.toContain("product.name");
@@ -41,7 +41,7 @@ test("action button does not inject a fake field into the graph (Fix 2)", () => 
   const { html: out } = expandHtmlServerSide(html);
   const $ = load(out);
   const graph = generateGraphFromDom($);
-  const product = graph.nodes.find((n: any) => n.entity === "product");
+  const product = graph.nodes.find((n: any) => n.entity === "product")!;
 
   expect(product).toBeDefined();
   // The entity name itself must NOT appear as a field key (old fake-field bug).

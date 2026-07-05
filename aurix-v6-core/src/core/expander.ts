@@ -1,21 +1,33 @@
 import { CheerioAPI, load } from "cheerio";
-import { parseEntityIx, classifyShortIx, fullFieldName } from "./ix-rules";
-import { structuralPath, deriveNodeId, canonicalizeGraph } from "./canonical";
+import { parseEntityIx, classifyShortIx, fullFieldName, detectContract } from "./ix-rules";
+import { structuralPath } from "./canonical";
+import { buildIr, type BuildIrOptions } from "../ir/build";
+import { loadVocab } from "../ir/vocab";
+import type { IrGraph } from "../ir/types";
 
-/** All ix* attribute names that AURIX uses during authoring. */
-const IX_ATTRS = ["ix", "ix-field", "ix-auto", "ix-group", "ix-value", "ix-mode", "ix-domain", "ix-version"] as const;
+/** All ix* authoring attribute names that AURIX reads and then strips. */
+const IX_ATTRS = [
+  "ix", "ix-field", "ix-auto", "ix-group", "ix-value", "ix-mode", "ix-domain", "ix-version",
+  // Action-contract + typing authoring attributes.
+  "ix-action", "ix-endpoint", "ix-method", "ix-handler", "ix-side-effect",
+  "ix-auth", "ix-requires", "ix-output", "ix-type", "ix-schema", "ix-trust",
+] as const;
 
 /** All data-* attribute names that AURIX writes during expansion. */
 const AURIX_DATA_ATTRS = [
   "data-type", "data-entity", "data-id", "data-field", "data-action",
   "data-auto", "data-group", "data-value", "data-mode", "data-domain",
   "data-aurix",
+  // Contract + typing annotations.
+  "data-endpoint", "data-method", "data-handler", "data-side-effect",
+  "data-auth", "data-requires", "data-output", "data-field-type", "data-schema", "data-trust",
+  "data-contract",
 ] as const;
 
 export type ExpandMode = "canonical" | "debug" | "compact";
 
 export type ExpandOptions = {
-  vocab?: Record<string, string>;
+  vocab?: Record<string, import("../ir/vocab").VocabEntry>;
   defaultDomain?: string;
   version?: string;
   /**
@@ -25,11 +37,8 @@ export type ExpandOptions = {
    *   expansion + graph generation. `data-*` annotations stay (needed for CSR
    *   updates and test selectors). The graph `<script>` stays.
    * - **debug**: keeps everything — ix* attrs, data-* attrs, and graph script.
-   *   Equivalent to the old behavior.
    * - **compact**: additionally strips the AURIX `data-*` annotations from
    *   every element that received AURIX annotations during this expansion.
-   *   Developer-authored `data-*` on unrelated elements are never touched.
-   *   Ships clean HTML + the graph `<script>` only.
    *
    * In all modes the graph `<script id="aurix-graph">` is always present.
    */
@@ -48,8 +57,6 @@ export function expandHtmlServerSide(html: string, opts: ExpandOptions = {}): { 
   }
   body.attr("data-aurix", version);
 
-  // In compact mode we track which elements were annotated by AURIX so we
-  // only strip AURIX data-* from those elements (never touch unrelated ones).
   const aurixAnnotated = new Set<any>();
 
   function applyExpansion(el: CheerioAPI | any) {
@@ -60,6 +67,23 @@ export function expandHtmlServerSide(html: string, opts: ExpandOptions = {}): { 
     const ixGroup = node.attr("ix-group");
     const ixValue = node.attr("ix-value");
     const ixMode = node.attr("ix-mode");
+
+    // Map ix-* contract/typing authoring attrs onto their data-* equivalents so
+    // both the graph builder and the CSR expander read one consistent surface.
+    const mapAttr = (ixName: string, dataName: string) => {
+      const v = node.attr(ixName);
+      if (v != null && node.attr(dataName) == null) node.attr(dataName, v);
+    };
+    mapAttr("ix-endpoint", "data-endpoint");
+    mapAttr("ix-method", "data-method");
+    mapAttr("ix-handler", "data-handler");
+    mapAttr("ix-side-effect", "data-side-effect");
+    mapAttr("ix-auth", "data-auth");
+    mapAttr("ix-requires", "data-requires");
+    mapAttr("ix-output", "data-output");
+    mapAttr("ix-type", "data-field-type");
+    mapAttr("ix-schema", "data-schema");
+    mapAttr("ix-trust", "data-trust");
 
     let annotated = false;
 
@@ -73,19 +97,48 @@ export function expandHtmlServerSide(html: string, opts: ExpandOptions = {}): { 
 
     const parentEntityOf = () => node.parents("[data-entity]").first().attr("data-entity") || null;
 
+    // Compute action-contract signals for this element.
+    const tagName = String((el as any).name || (el as any).tagName || "").toLowerCase();
+    const role = node.attr("role") || null;
+    const withinForm = tagName === "form" ||
+      ((tagName === "button" || tagName === "input" || role === "button") && node.closest("form").length > 0);
+    const contract = detectContract({
+      endpoint: node.attr("data-endpoint") || null,
+      method: node.attr("data-method") || null,
+      handler: node.attr("data-handler") || null,
+      isForm: withinForm,
+      explicitAction: node.attr("ix-action") || null,
+    });
+    const explicitAction = node.attr("ix-action") || null;
+    const shortIx = ix && !entity ? ix : null;
+    const actionName = explicitAction || shortIx;
+    const controlLike = tagName === "button" || role === "button" ||
+      (tagName === "input" && ["submit", "button"].includes((node.attr("type") || "").toLowerCase()));
+    // A control (or explicit ix-action) that names an action but declares no
+    // contract is a phantom: it cannot be invoked, so it is dropped entirely —
+    // never promoted to a tool and never demoted to a junk data field.
+    const declaredActionIntent = !!explicitAction || (!!shortIx && controlLike);
+
     if (ixField) {
       node.attr("data-field", fullFieldName(ixField, parentEntityOf()));
       annotated = true;
-    } else if (ix && !entity) {
-      const cls = classifyShortIx(ix, {
-        tagName: String((el as any).name || (el as any).tagName || ""),
-        role: node.attr("role") || null,
-        parentEntity: parentEntityOf()
+    } else if (actionName && contract) {
+      const cls = classifyShortIx(actionName, {
+        tagName, role, parentEntity: parentEntityOf(), contract, explicitAction,
       });
-      // Fix 2: action elements carry data-action ONLY. The previous
-      // `data-field = parentEntity` branch injected a fake field into the graph.
-      if (cls.kind === "action") node.attr("data-action", cls.action);
-      else if (cls.kind === "field") node.attr("data-field", cls.field);
+      if (cls.kind === "action") {
+        node.attr("data-action", cls.action);
+        node.attr("data-contract", cls.contract.kind);
+      }
+      annotated = true;
+    } else if (declaredActionIntent) {
+      // Phantom action (declared without a contract): intentionally drop.
+    } else if (shortIx) {
+      // Non-control short token with no contract is data (the "address" case).
+      const cls = classifyShortIx(shortIx, {
+        tagName, role, parentEntity: parentEntityOf(), contract: null, explicitAction: null,
+      });
+      if (cls.kind === "field") node.attr("data-field", cls.field);
       annotated = true;
     }
 
@@ -101,34 +154,26 @@ export function expandHtmlServerSide(html: string, opts: ExpandOptions = {}): { 
     applyExpansion(el);
   });
 
-  // The body itself gets data-domain / data-aurix — always mark it.
   const bodyEl = body.get(0);
   if (bodyEl) aurixAnnotated.add(bodyEl);
 
-  // Generate graph BEFORE any stripping (compact mode needs the data-* intact).
-  const graph = generateGraphFromDom($);
+  // Generate the typed IR (graph) BEFORE any stripping.
+  const graph = generateGraphFromDom($, { vocab: loadVocab(opts.vocab), version, includeDebug: mode === "debug" });
   const graphScript = `<script id="aurix-graph" type="application/aurix+json">${serializeGraphJson(graph)}</script>`;
   body.prepend(graphScript);
 
   // --- Mode: attribute stripping ---
   if (mode === "canonical" || mode === "compact") {
-    // Remove all ix* authoring attributes from every element.
     $("*").each((_i, el) => {
       const node = $(el);
-      for (const attr of IX_ATTRS) {
-        node.removeAttr(attr);
-      }
+      for (const attr of IX_ATTRS) node.removeAttr(attr);
     });
   }
 
   if (mode === "compact") {
-    // Remove AURIX data-* annotations from elements AURIX annotated during
-    // this expansion pass. Never touch data-* on elements we didn't annotate.
     for (const el of aurixAnnotated) {
       const node = $(el);
-      for (const attr of AURIX_DATA_ATTRS) {
-        node.removeAttr(attr);
-      }
+      for (const attr of AURIX_DATA_ATTRS) node.removeAttr(attr);
     }
   }
 
@@ -148,52 +193,15 @@ export function serializeGraphJson(graph: unknown): string {
   );
 }
 
-export function generateGraphFromDom($: CheerioAPI) {
-  const nodes: any[] = [];
-  $("[data-entity]").each((i, el) => {
-    const $el = $(el);
-    const entity = $el.attr("data-entity");
-    const type = $el.attr("data-type");
-    const dataId = $el.attr("data-id");
-    // Fix 5: stable, content-addressed ID so inserting a later sibling never
-    // shifts earlier nodes' IDs. See canonical.ts for the derivation rules.
-    const id = deriveNodeId(entity!, type, dataId, structuralPath(el, $));
-    const fields: Record<string, any> = {};
-
-    $el.find("[data-field]").each((j, f) => {
-      const $f = $(f);
-      // Only claim fields whose nearest entity ancestor is this node; otherwise
-      // fields belonging to a nested entity would leak into (and overwrite) the parent.
-      if ($f.closest("[data-entity]").get(0) !== el) return;
-      // Defense in depth: action elements must never produce field entries. The
-      // classification layer (ix-rules) already ensures actions get data-action
-      // only; this guard is a safety net against future classification drift.
-      if ($f.attr("data-action")) return;
-      const field = $f.attr("data-field");
-      if (!field) return;
-      let value: any = $f.text().trim();
-      if ($f.is("img")) value = $f.attr("src");
-      if ($f.attr("data-value")) value = $f.attr("data-value");
-      fields[field] = { value, source: $f.attr("data-source") || "server" };
-    });
-
-    const actions: Record<string, any> = {};
-    $el.find("[data-action]").each((j, a) => {
-      const $a = $(a);
-      if ($a.closest("[data-entity]").get(0) !== el) return;
-      const act = $a.attr("data-action");
-      if (!act) return;
-      actions[act] = {
-        method: $a.attr("data-method") || "click",
-        endpoint: $a.attr("data-endpoint"),
-        requires: $a.attr("data-requires")?.split(",").map((s: string) => s.trim()) || [],
-        auth: $a.attr("data-auth") || "optional"
-      };
-    });
-
-    nodes.push({ id, type, entity, fields, actions, source: $el.attr("data-source") || "server" });
-  });
-
-  // Fix 5: canonicalize before returning (sorted nodes + sorted keys).
-  return canonicalizeGraph({ aurix: { version: "6.0" }, nodes });
+/**
+ * Builds the typed AURIX IR from an expanded DOM. Delegates to {@link buildIr}
+ * (src/ir/build.ts) which owns typed values, the agent-safety trio, and stable
+ * ids. `opts` is optional so legacy callers `generateGraphFromDom($)` keep
+ * working with the default vocab.
+ */
+export function generateGraphFromDom($: CheerioAPI, opts?: BuildIrOptions): IrGraph {
+  return buildIr($, { vocab: opts?.vocab ?? loadVocab(), version: opts?.version ?? "6.0" });
 }
+
+// Re-export so existing imports of structuralPath via expander keep resolving.
+export { structuralPath };
