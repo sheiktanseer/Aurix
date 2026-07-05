@@ -94,24 +94,40 @@ export function parseMoney(raw: string, hints: ParseHints = {}): { value: number
   return { value: amount, currency: currency || "USD" };
 }
 
-/** Extracts a numeric amount from a string that may contain grouping/decimal separators. */
+/**
+ * Extracts a numeric amount from a string that may contain grouping/decimal
+ * separators, disambiguating US ("1,234.56") from European ("1.234,56") layouts.
+ *
+ * Rules:
+ *  - Both separators present: the *last* one is the decimal separator.
+ *  - Only commas: >1 comma, or a lone comma followed by exactly 3 digits, is a
+ *    thousands separator ("1,299" -> 1299); otherwise it is decimal ("1,29").
+ *  - Only dots: >1 dot is thousands ("1.234.567"); a lone dot is decimal (US
+ *    default), even when followed by 3 digits.
+ */
 function parseNumericAmount(text: string): number | null {
-  // Keep digits, separators, and a leading minus.
   const cleaned = text.replace(/[^0-9.,\-]/g, "");
   if (!/[0-9]/.test(cleaned)) return null;
 
-  const lastComma = cleaned.lastIndexOf(",");
-  const lastDot = cleaned.lastIndexOf(".");
+  const commas = (cleaned.match(/,/g) || []).length;
+  const dots = (cleaned.match(/\./g) || []).length;
 
   let normalized: string;
-  if (lastComma === -1 && lastDot === -1) {
-    normalized = cleaned;
-  } else if (lastComma > lastDot) {
-    // Comma is the decimal separator: "1.234,56" -> strip dots, comma -> dot.
-    normalized = cleaned.replace(/\./g, "").replace(",", ".");
+  if (commas > 0 && dots > 0) {
+    if (cleaned.lastIndexOf(",") > cleaned.lastIndexOf(".")) {
+      normalized = cleaned.replace(/\./g, "").replace(",", "."); // comma decimal
+    } else {
+      normalized = cleaned.replace(/,/g, ""); // dot decimal
+    }
+  } else if (commas > 0) {
+    const afterLast = cleaned.length - cleaned.lastIndexOf(",") - 1;
+    normalized = commas > 1 || afterLast === 3
+      ? cleaned.replace(/,/g, "")   // thousands
+      : cleaned.replace(",", ".");  // decimal
+  } else if (dots > 1) {
+    normalized = cleaned.replace(/\./g, ""); // European thousands
   } else {
-    // Dot is the decimal separator: "1,234.56" -> strip commas.
-    normalized = cleaned.replace(/,/g, "");
+    normalized = cleaned;
   }
 
   const n = Number(normalized);
