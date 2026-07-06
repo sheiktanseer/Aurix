@@ -153,6 +153,12 @@ tests: fixture IR in → committed expected artifact out; any diff fails CI.
      webmachinelearning/webmcp repo — track the repo, not blog posts.
    - `[AMENDED B2]` (C-6) Includes the `aurix:update` patch runtime: updates
      drive value patching and tool re-registration via AbortSignal.
+   - `[AMENDED B2]` **Safety metadata (sideEffects, preconditions) is immutable
+     post-attestation; `aurix:update` may patch values only, never safety
+     fields; any runtime safety-field delta is a parity alarm, not an update.**
+     (Rationale: once the patch runtime exists, live DOM attributes are
+     attacker-writable surface — an XSS flipping `destructive`→`none` must be
+     detected, not honored.)
 3. `@aurix/emit-manifest` — /.well-known outputs: capability manifest,
    JWKS, and an **attestation-pinning policy** (`{"signs": "always",
    "max-age": <seconds>}`): verifiers that have seen it treat a missing
