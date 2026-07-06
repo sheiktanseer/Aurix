@@ -1,0 +1,15 @@
+{
+  "name": "@aurix/ir",
+  "version": "7.0.0",
+  "description": "AURIX typed IR — pure, DOM-free: types, typed values, vocab.config, agent-safety trio, lint.",
+  "author": "Sheik Tanseer",
+  "license": "MIT",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "jest",
+    "lint": "eslint src --ext .ts"
+  }
+}
