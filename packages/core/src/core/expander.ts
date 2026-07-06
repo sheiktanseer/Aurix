@@ -1,9 +1,9 @@
 import { CheerioAPI, load } from "cheerio";
 import { parseEntityIx, classifyShortIx, fullFieldName, detectContract } from "./ix-rules";
 import { structuralPath } from "./canonical";
-import { buildIr, type BuildIrOptions } from "../ir/build";
-import { loadVocab } from "../ir/vocab";
-import type { IrGraph } from "../ir/types";
+import { buildIr, type BuildIrOptions } from "./build";
+import { loadVocab } from "@aurix/ir";
+import type { IrGraph } from "@aurix/ir";
 
 /** All ix* authoring attribute names that AURIX reads and then strips. */
 const IX_ATTRS = [
@@ -27,7 +27,7 @@ const AURIX_DATA_ATTRS = [
 export type ExpandMode = "canonical" | "debug" | "compact";
 
 export type ExpandOptions = {
-  vocab?: Record<string, import("../ir/vocab").VocabEntry>;
+  vocab?: Record<string, import("@aurix/ir").VocabEntry>;
   defaultDomain?: string;
   version?: string;
   /**

@@ -6,11 +6,11 @@
  */
 import { expandHtmlServerSide, generateGraphFromDom } from "../src/core/expander";
 import { load } from "cheerio";
-import { coerceValue, parseMoney, parseUrl, parseDate } from "../src/ir/values";
-import { resolveFieldType, loadVocab } from "../src/ir/vocab";
-import { derivePreconditions } from "../src/ir/safety";
-import { lintIr } from "../src/ir/lint";
-import type { IrGraph } from "../src/ir/types";
+import { coerceValue, parseMoney, parseUrl, parseDate } from "@aurix/ir";
+import { resolveFieldType, loadVocab } from "@aurix/ir";
+import { derivePreconditions } from "@aurix/ir";
+import { lintIr } from "@aurix/ir";
+import type { IrGraph } from "@aurix/ir";
 
 // ---------------------------------------------------------------------------
 // Typed value parsing

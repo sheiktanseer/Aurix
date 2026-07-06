@@ -2,7 +2,7 @@
 // and client-side (DOM) expanders. Keeping these here guarantees SSR/CSR parity:
 // there is exactly one source of truth for how an `ix` token becomes data-*.
 
-import type { ActionContract } from "../ir/types";
+import type { ActionContract } from "@aurix/ir";
 
 export type IxClassification =
   | { kind: "entity"; type: string; entity: string; id?: string }

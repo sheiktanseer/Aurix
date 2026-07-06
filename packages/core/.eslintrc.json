@@ -25,7 +25,13 @@
   },
   "overrides": [
     {
-      "files": ["src/core/**/*.ts", "src/ir/**/*.ts"],
+      "files": ["test/**/*.ts"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off"
+      }
+    },
+    {
+      "files": ["src/core/**/*.ts", "src/client/**/*.ts", "src/server/**/*.ts"],
       "rules": {
         "no-restricted-imports": [
           "error",

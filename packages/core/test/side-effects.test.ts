@@ -9,8 +9,8 @@ import fs from "fs";
 import path from "path";
 import { load } from "cheerio";
 import { expandHtmlServerSide, generateGraphFromDom } from "../src/core/expander";
-import { lintIr } from "../src/ir/lint";
-import { AurixValidationError } from "../src/ir/errors";
+import { lintIr } from "@aurix/ir";
+import { AurixValidationError } from "@aurix/ir";
 
 /** Expanded DOM (data-* set) for one entity with one action, sideEffects optional. */
 function actionDom(opts: { action: string; method: string; sideEffect?: string }) {
@@ -69,8 +69,15 @@ describe("sideEffects", () => {
   });
 
   test("no-derivation-import", () => {
-    // Core and IR must never import the scanner-only proposal module.
-    const roots = [path.resolve(__dirname, "../src/core"), path.resolve(__dirname, "../src/ir")];
+    // Core modules (core/client/server) and the @aurix/ir package must never
+    // import the scanner-only proposal module. (The barrel re-export in
+    // src/index.ts and the scanner package itself are intentionally excluded.)
+    const roots = [
+      path.resolve(__dirname, "../src/core"),
+      path.resolve(__dirname, "../src/client"),
+      path.resolve(__dirname, "../src/server"),
+      path.resolve(__dirname, "../../ir/src"),
+    ];
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {

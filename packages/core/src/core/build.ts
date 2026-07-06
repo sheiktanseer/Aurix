@@ -5,16 +5,19 @@
  */
 
 import type { CheerioAPI } from "cheerio";
-import { deriveNodeId, structuralPath, canonicalizeGraph } from "../core/canonical";
-import { coerceValue, type FieldType } from "./values";
-import { resolveFieldType, loadVocab, type VocabConfig } from "./vocab";
+import { deriveNodeId, structuralPath, canonicalizeGraph } from "./canonical";
 import {
+  coerceValue,
+  resolveFieldType,
+  loadVocab,
   assertSideEffects,
   derivePreconditions,
   deriveOutputSchema,
-  type ActionAttrs,
-} from "./safety";
+} from "@aurix/ir";
 import type {
+  FieldType,
+  VocabConfig,
+  ActionAttrs,
   ActionContract,
   ActionContractKind,
   IrAction,
@@ -22,7 +25,7 @@ import type {
   IrGraph,
   IrNode,
   TrustLevel,
-} from "./types";
+} from "@aurix/ir";
 
 export type BuildIrOptions = {
   vocab?: VocabConfig;

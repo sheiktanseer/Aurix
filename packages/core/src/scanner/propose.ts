@@ -9,7 +9,7 @@
  * rule). Do not re-export it from the IR barrel.
  */
 
-import type { SideEffect } from "../ir/types";
+import type { SideEffect } from "@aurix/ir";
 
 export type SideEffectProposal = {
   value: SideEffect;
