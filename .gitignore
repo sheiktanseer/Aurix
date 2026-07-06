@@ -1,0 +1,52 @@
+# Root .gitignore — repo-wide. The working tree is auto-committed on a timer in
+# this environment, so anything that must NEVER be committed/pushed lives here.
+
+# --- Secrets / keys (signing work, Step 6 — treat origin as public) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.der
+*.jwk
+*.keystore
+id_ed25519*
+id_rsa*
+keys/
+secrets/
+.secrets/
+*.secret
+
+# --- Dependencies ---
+node_modules/
+.pnp/
+.pnp.*
+
+# --- Build output ---
+dist/
+build/
+*.tsbuildinfo
+
+# --- Test / coverage ---
+coverage/
+.nyc_output/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Caches ---
+.eslintcache
+.cache/

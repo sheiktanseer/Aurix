@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# AURIX pre-push secret gate. Blocks a push if gitleaks finds secrets in the
+# commits being pushed. Belt-and-suspenders with the CI job (.github/workflows/
+# secret-scan.yml) — CI is authoritative; this catches leaks before they leave
+# the machine.
+#
+# Install (client hooks are not tracked by git):
+#   git config core.hooksPath hooks      # use this tracked dir for all hooks
+# or copy this file to .git/hooks/pre-push and chmod +x.
+set -euo pipefail
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-push: gitleaks not installed — skipping local scan (CI still gates)." >&2
+  echo "          install: https://github.com/gitleaks/gitleaks#installing" >&2
+  exit 0
+fi
+
+echo "pre-push: scanning for secrets with gitleaks..." >&2
+if ! gitleaks protect --staged --redact --config .gitleaks.toml; then
+  echo "pre-push: BLOCKED — gitleaks found potential secrets. Fix or allowlist before pushing." >&2
+  exit 1
+fi
+# Also scan the full working tree state being pushed.
+gitleaks detect --redact --no-git --config .gitleaks.toml || {
+  echo "pre-push: BLOCKED — gitleaks found potential secrets in the tree." >&2
+  exit 1
+}
+echo "pre-push: clean." >&2

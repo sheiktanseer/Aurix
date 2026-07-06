@@ -1,0 +1,35 @@
+# gitleaks config — extends the built-in ruleset and adds explicit key-header
+# and env-file rules relevant to AURIX signing (Step 6).
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "aurix-private-key-header"
+description = "PEM/OpenSSH private key header"
+regex = '''-----BEGIN (?:RSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----'''
+tags = ["key", "private"]
+
+[[rules]]
+id = "aurix-jwk-private"
+description = "JWK containing a private key parameter 'd'"
+regex = '''"kty"\s*:\s*"(?:OKP|EC|RSA)"[^}]*"d"\s*:\s*"[A-Za-z0-9_-]{20,}"'''
+tags = ["key", "jwk", "private"]
+
+[[rules]]
+id = "aurix-signing-key-env"
+description = "AURIX signing key material assigned in env/source"
+regex = '''(?i)AURIX_SIGNING_KEY\s*[=:]\s*["']?[A-Za-z0-9+/_-]{24,}'''
+tags = ["key", "env"]
+
+[allowlist]
+description = "Test-only fixtures — deterministic non-secret values used in unit tests."
+paths = [
+  '''aurix-v6-core/test/.*\.test\.ts''',
+]
+# The 32-char HMAC test strings in the security/canonical suites are literal
+# fixtures, not real secrets.
+regexes = [
+  '''test-secret-aurix-exactly-32chars!!''',
+  '''test-secret-key-for-aurix-signing-32chars!!''',
+]
